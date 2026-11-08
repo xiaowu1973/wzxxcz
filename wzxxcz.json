@@ -22,10 +22,22 @@
             "url": "https://gh-proxy.org/https://raw.githubusercontent.com/adminouyang/231006/refs/heads/main/py/%E4%BC%98%E8%B4%A8%E6%BA%90/output/ipv4/result.txt"
         },
         {
+            "name": "咪咕TV直播",
+            "type": 0,
+            "ua": "okhttp/5.3.2",
+            "url": "https://eastscreen.tv/iptvlist.php?token=N1pcBwAGHwkCAx8OTFhABgEFAA"
+        },
+        {
             "name": "裤佬IPTV直播",
             "type": 0,
             "ua": "okhttp/5.3.2",
             "url": "https://gh-proxy.org/https://raw.githubusercontent.com/pyapk/1/refs/heads/main/zby"
+        },
+        {
+            "name": "裤佬IPTV体育直播",
+            "type": 0,
+            "ua": "okhttp/5.3.2",
+            "url": "https://iptv.445569.xyz/live.m3u"
         },
         {
             "name": "裤佬体育直播",
@@ -58,12 +70,6 @@
             "url": "https://445569.pages.dev/https://raw.githubusercontent.com/fafa002/yf2025/refs/heads/main/yiyifafa.txt"
         },
         {
-            "name": "日后TV直播",
-            "type": 0,
-            "ua": "okhttp/5.3.2",
-            "url": "https://jsnzkpg4.pages.dev/http://rihou.cc:555/gggg.nzk"
-        },
-        {
             "name": "潇雨TV直播",
             "type": 0,
             "ua": "okhttp/5.3.2",
@@ -88,40 +94,10 @@
             "url": "https://gitee.com/hzxs800274/iptv/raw/master/live/TV"
         },
         {
-            "name": "zwssina",
-            "type": 0,
-            "ua": "okhttp/5.3.2",
-            "url": "https://gitee.com/zwssina/yunduanyuan/raw/master/SB"
-        },
-        {
             "name": "卡卡西IPTV",
             "type": 0,
             "ua": "okhttp/5.3.2",
-            "url": "https://gh-proxy.org/https://raw.githubusercontent.com/kakaxi-1/IPTV/refs/heads/main/ipv4.txt"
-        },
-        {
-            "name": "港澳台",
-            "type": 0,
-            "ua": "okhttp/5.3.2",
-            "url": "https://iptv.852851.xyz/sub/bwQfdMcUYrjq/playlist.m3u"
-        },
-        {
-            "name": "台湾4GTV直播",
-            "type": 0,
-            "ua": "okhttp/5.3.2",
-            "url": "http://4gtv.cnlive.club/4gtv.m3u"
-        },
-        {
-            "name": "全球TV直播",
-            "type": 0,
-            "ua": "okhttp/5.3.2",
-            "url": "https://seep.eu.org/iptv-org.github.io/iptv/index.m3u"
-        },
-        {
-            "name": "内地港台",
-            "type": 0,
-            "ua": "okhttp/5.3.2",
-            "url": "https://gh-proxy.org/https://raw.githubusercontent.com/FGBLH/HKL/refs/heads/main/内地港台"
+            "url": "https://gh-proxy.org/https://raw.githubusercontent.com/kakaxi-1/zubo/refs/heads/main/itvlist.txt"
         },
         {
             "name": "MIT",
@@ -135,7 +111,7 @@
             "type": 0,
             "playerType": 2,
             "ua": "okhttp",
-            "url": "https://gh-proxy.org/https://github.com/bang359/dsj/raw/main/dsjcs.txt"
+            "url": "https://gh-proxy.org/https://raw.githubusercontent.com/bang359/dsj/refs/heads/main/dsjcs.txt"
         },
         {
             "name": "薄荷直播",
@@ -150,22 +126,10 @@
             "url": "https://gh-proxy.org/https://raw.githubusercontent.com/xJEYDAin/iptv/main/output/all_merged.m3u"
         },
         {
-            "name": "live",
-            "type": 0,
-            "ua": "okhttp",
-            "url": "https://live.445569.xyz/live.m3u"
-        },
-        {
-            "name": "飞扬",
-            "type": 0,
-            "ua": "okhttp",
-            "url": "https://www.985pan.com/down.php/bf5e9607ff407fcdd71f63928ea5bc79.txt"
-        },
-        {
-            "name": "直播源合集（密码1111）",
+            "name": "807080747",
             "type": 0,
             "ua": "okhttp/5.3.2",
-            "url": "https://gh-proxy.org/https://raw.githubusercontent.com/807080747/zv/refs/heads/main/sese.txt"
+            "url": "https://gh-proxy.org/https://raw.githubusercontent.com/807080747/fykj/refs/heads/main/live.txt"
         },
         {
             "name": "蜻蜓",
@@ -190,12 +154,6 @@
             "type": 0,
             "ua": "okhttp/5.3.2",
             "url": "http://www.52top.com.cn:678/downloads/migu.txt"
-        },
-        {
-            "name": "易发",
-            "type": 0,
-            "ua": "okhttp/5.3.2",
-            "url": "https://gh-proxy.org/https://raw.githubusercontent.com/fafa002/yf2025/refs/heads/main/yiyifafa.txt"
         },
         {
             "name": "Box",
@@ -35942,10 +35900,10 @@
             "api": "./py/红果短剧.py"
         },
         {
-            "key": "红果短剧备",
-            "name": "🍎红果短剧备",
+            "key": "西瓜短剧",
+            "name": "🍉西瓜短剧",
             "type": 3,
-            "api": "./py/红果短剧最终版.py"
+            "api": "./py/西瓜短剧.py"
         },
         {
             "key": "繁花剧场",
