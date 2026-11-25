@@ -75,6 +75,16 @@ except ImportError:
             except Exception:
                 pass
 
+        # 离线/老基类无持久化缓存时的空桩，脚本侧 try 兜底跳过
+        def getCache(self, key):
+            return None
+
+        def setCache(self, key, value):
+            return "failed"
+
+        def delCache(self, key):
+            return "failed"
+
     Spider = _BaseSpider
 
 
@@ -84,6 +94,10 @@ HOST = HOSTS[0]
 UA = ("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
       "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1")
 DEFAULT_PIC = ""
+
+# 守卫令牌持久化缓存（热启动复用）：过盾成功后落盘，下次启动先读缓存试，失效自动回退重解
+_GUARD_CACHE_KEY = "rhwf_guard"
+_GUARD_TTL = 1800  # 秒，30 分钟内复用
 
 INTRO_PREFIX = "🍊小橙子为您介绍剧情👉请不要相信视频中的广告，以免上当受骗！"
 
@@ -326,6 +340,11 @@ class Spider(Spider):
     def getName(self):
         return "rhwf.cn"
 
+    def getDependence(self):
+        # 框架 init 阶段反射调用（app.getDependence → ru.getDependence）；
+        # 本脚本无额外依赖模块，返回空列表，避免属性缺失在初始化窗口抛异常。
+        return []
+
     def log(self, *a, **kw):
         # 壳子基类 log 为单参签名，多参调用需在此拼接一行，避免 TypeError 吞掉成功路径
         try:
@@ -334,32 +353,36 @@ class Spider(Spider):
             pass
 
     def init(self, extend=""):
+        # 初始化只做本地字段装配，不在此发网络请求：
+        # init 在框架单例缓存(computeIfAbsent)窗口内同步执行，一旦在此抛异常，
+        # 实例会被永久缓存成空壳 SpiderNull，后续分类/首页请求不再重试 init；
+        # 会话与过盾推迟到首次列表请求惰性建立，遇壳由 _http_get 自愈重放。
         try:
-            self.extend = json.loads(extend) if extend else {}
-        except Exception:
-            self.extend = {}
-        self.hosts = list(self.extend.get("hosts") or HOSTS)
-        self.host_idx = 0
-        self.site_url = (self.extend.get("site") or self.hosts[0]).rstrip("/")
-        self.headers = {
-            "User-Agent": UA,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Referer": self.site_url + "/",
-            "Upgrade-Insecure-Requests": "1",
-        }
-        self.default_pic = DEFAULT_PIC
-        self._play_cache = {}
-        # 守卫会话：自建 session 保留 guard/guardret Cookie；基类 fetch 不持 jar, 双保险写请求头
-        self._guard_session = None
-        self._guard_cookie = ""
-        self._guard_ok = False
-        self._guard_lock = threading.Lock()
-        # 串行加载期预热首页落会话/过盾，避免列表请求并发撞壳；失败不阻断，后续遇壳再解
-        try:
-            self._fetch(self.site_url + "/", tries=1)
+            try:
+                self.extend = json.loads(extend) if extend else {}
+            except Exception:
+                self.extend = {}
+            self.hosts = list(self.extend.get("hosts") or HOSTS)
+            self.host_idx = 0
+            self.site_url = (self.extend.get("site") or self.hosts[0]).rstrip("/")
+            self.headers = {
+                "User-Agent": UA,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Referer": self.site_url + "/",
+                "Upgrade-Insecure-Requests": "1",
+            }
+            self.default_pic = DEFAULT_PIC
+            self._play_cache = {}
+            # 守卫会话：自建 session 保留 guard/guardret Cookie；基类 fetch 不持 jar, 双保险写请求头
+            self._guard_session = None
+            self._guard_cookie = ""
+            self._guard_ok = False
+            self._guard_lock = threading.Lock()
+            # 热启动：先回填持久化的守卫令牌，失效/不可用则跳过，后续遇壳再解
+            self._cache_load()
         except Exception as e:
-            self.log("init 预热异常", e)
+            self.log("init 初始化异常(已兜底, 不阻断)", e)
 
     def _switch_host(self):
         """主备域名轮换：切到下一 host，清守卫会话与 Cookie，后续请求重解盾。"""
@@ -371,6 +394,7 @@ class Spider(Spider):
         self._guard_session = None
         self._guard_cookie = ""
         self._guard_ok = False
+        self._cache_clear()
         self.headers.pop("Cookie", None)
         self.log("切换域名 →", self.site_url)
         return True
@@ -390,6 +414,54 @@ class Spider(Spider):
                 sess = None
             self._guard_session = sess
         return self._guard_session
+
+    def _cache_load(self):
+        """从持久化缓存回填守卫 Cookie；host 不符/过期/代理不可用则跳过，不阻断。"""
+        try:
+            data = self.getCache(_GUARD_CACHE_KEY)
+            if not isinstance(data, dict):
+                return False
+            if data.get("host") != self.site_url:
+                return False
+            ck = data.get("cookies") or {}
+            if not ck:
+                return False
+            sess = self._guard_sess()
+            if sess is not None:
+                for k, v in ck.items():
+                    sess.cookies.set(k, v, path="/")
+            self._guard_cookie = (data.get("cookie_header")
+                                  or "; ".join("%s=%s" % (k, v) for k, v in ck.items()))
+            self._guard_ok = True
+            self.log("守卫令牌缓存已复用")
+            return True
+        except Exception as e:
+            self.log("缓存读跳过", e)
+            return False
+
+    def _cache_save(self):
+        """过盾成功后持久化守卫令牌；代理不可用则跳过，不阻断。"""
+        try:
+            sess = self._guard_session
+            ck = sess.cookies.get_dict() if sess is not None else {}
+            if not ck:
+                return
+            data = {
+                "host": self.site_url,
+                "cookies": ck,
+                "cookie_header": self._guard_cookie,
+                "expiresAt": int(time.time()) + _GUARD_TTL,
+            }
+            self.setCache(_GUARD_CACHE_KEY, data)
+        except Exception as e:
+            self.log("缓存写跳过", e)
+
+    def _cache_clear(self):
+        """清除持久化守卫令牌（切域/令牌失效时调用）。"""
+        try:
+            self.delCache(_GUARD_CACHE_KEY)
+        except Exception:
+            pass
 
     @staticmethod
     def _is_shell(text, status=200):
@@ -469,6 +541,8 @@ class Spider(Spider):
                             timeout=(10, 20))
             ok = not self._is_shell(rv.text)
         self._guard_ok = ok
+        if ok:
+            self._cache_save()
         self.log("守卫求解 gx=%d gw=%d 放行=%s" % (gx, gy, ok))
         return ok
 
@@ -679,56 +753,78 @@ class Spider(Spider):
         return {"class": CLASSES, "filters": FILTERS}
 
     def homeVideoContent(self):
-        html = self._fetch(self.site_url + "/")
-        self.log("home HTML 长度: %d" % len(html))
-        return {"list": self._parse_cards(html)}
+        try:
+            html = self._fetch(self.site_url + "/")
+            self.log("home HTML 长度: %d" % len(html))
+            videos = self._parse_cards(html)
+            # 空列表兜底：疑似撞壳/未解盾导致，清守卫态重解重拉一次（与分类对齐）
+            if not videos:
+                self.log("  首页为空, 清守卫态重拉一次")
+                self._guard_session = None
+                self._guard_cookie = ""
+                self._guard_ok = False
+                html = self._fetch(self.site_url + "/")
+                self.log("  重拉 HTML 长度: %d" % len(html))
+                videos = self._parse_cards(html)
+            return {"list": videos}
+        except Exception as e:
+            self.log("homeVideoContent 异常", e)
+            return {"list": []}
 
     def categoryContent(self, tid, pg, filter, extend):
-        page = int(pg) if pg else 1
-        if isinstance(extend, str):
-            try:
-                extend = json.loads(extend)
-            except Exception:
-                extend = {}
-        extend = extend or {}
+        try:
+            page = int(pg) if pg else 1
+            if isinstance(extend, str):
+                try:
+                    extend = json.loads(extend)
+                except Exception:
+                    extend = {}
+            extend = extend or {}
 
-        url = self._list_url(tid, extend, page)
-        self.log("category: %s" % url)
-        html = self._fetch(url)
-        self.log("  HTML 长度: %d" % len(html))
-        videos = self._parse_cards(html)
-        # 空列表兜底：疑似撞壳/未解盾导致，清守卫态重解重拉一次
-        if not videos:
-            self.log("  列表为空, 清守卫态重拉一次")
-            self._guard_session = None
-            self._guard_cookie = ""
-            self._guard_ok = False
+            url = self._list_url(tid, extend, page)
+            self.log("category: %s" % url)
             html = self._fetch(url)
-            self.log("  重拉 HTML 长度: %d" % len(html))
+            self.log("  HTML 长度: %d" % len(html))
             videos = self._parse_cards(html)
-        pagecount = self._page_count(html, page)
-        self.log("  最终: %d 条, 总页数: %d" % (len(videos), pagecount))
-        return {
-            "list": videos, "page": page, "pagecount": pagecount,
-            "limit": 36, "total": pagecount * 36,
-        }
+            # 空列表兜底：疑似撞壳/未解盾导致，清守卫态重解重拉一次
+            if not videos:
+                self.log("  列表为空, 清守卫态重拉一次")
+                self._guard_session = None
+                self._guard_cookie = ""
+                self._guard_ok = False
+                html = self._fetch(url)
+                self.log("  重拉 HTML 长度: %d" % len(html))
+                videos = self._parse_cards(html)
+            pagecount = self._page_count(html, page)
+            self.log("  最终: %d 条, 总页数: %d" % (len(videos), pagecount))
+            return {
+                "list": videos, "page": page, "pagecount": pagecount,
+                "limit": 36, "total": pagecount * 36,
+            }
+        except Exception as e:
+            self.log("categoryContent 异常", e)
+            return {"list": [], "page": 1, "pagecount": 1, "limit": 36, "total": 0}
 
     def searchContent(self, key, quick, pg="1"):
-        page = int(pg) if pg else 1
-        kw = urllib.parse.quote(str(key or "").strip())
-        if page <= 1:
-            url = "%s/search/%s-------------.html" % (self.site_url, kw)
-        else:
-            url = "%s/search/%s--%d-----------.html" % (self.site_url, kw, page)
-        self.log("search: %s" % url)
-        html = self._fetch(url)
-        videos = self._parse_cards(html)
-        pagecount = self._page_count(html, page)
-        self.log("  搜索: %d 条, 总页数: %d" % (len(videos), pagecount))
-        return {
-            "list": videos, "page": page, "pagecount": pagecount,
-            "limit": 30, "total": pagecount * 30,
-        }
+        try:
+            page = int(pg) if pg else 1
+            kw = urllib.parse.quote(str(key or "").strip())
+            if page <= 1:
+                url = "%s/search/%s-------------.html" % (self.site_url, kw)
+            else:
+                url = "%s/search/%s--%d-----------.html" % (self.site_url, kw, page)
+            self.log("search: %s" % url)
+            html = self._fetch(url)
+            videos = self._parse_cards(html)
+            pagecount = self._page_count(html, page)
+            self.log("  搜索: %d 条, 总页数: %d" % (len(videos), pagecount))
+            return {
+                "list": videos, "page": page, "pagecount": pagecount,
+                "limit": 30, "total": pagecount * 30,
+            }
+        except Exception as e:
+            self.log("searchContent 异常", e)
+            return {"list": [], "page": 1, "pagecount": 1, "limit": 30, "total": 0}
 
     def searchContentPage(self, key, quick, pg="1"):
         return self.searchContent(key, quick, pg)
